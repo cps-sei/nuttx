@@ -236,6 +236,7 @@ void snapshot_main(void)
 	}
 
 	for (;;) {
+	        poll_snapshot();
 		poll_reboot();
 		if (snp_do_save) {
 			flags = enter_critical_section();
