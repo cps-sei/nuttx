@@ -165,7 +165,8 @@ static char g_sysbuffer[CONFIG_RAMLOG_BUFSIZE];
  * could be called before the driver initialization logic executes.
  */
 
-static struct ramlog_dev_s g_sysdev =
+//static
+struct ramlog_dev_s g_sysdev =
 {
 #ifndef CONFIG_RAMLOG_NONBLOCKING
   0,                             /* rl_nwaiters */

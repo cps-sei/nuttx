@@ -1832,6 +1832,15 @@ static int up_interrupt_common(struct up_dev_s *priv)
   pm_activity(PM_IDLE_DOMAIN, CONFIG_PM_SERIAL_ACTIVITY);
 #endif
 
+  {
+    uint32_t cr1, cr3;
+    
+    cr1 = up_serialin(priv, STM32_USART_CR1_OFFSET);
+    cr3 = up_serialin(priv, STM32_USART_CR3_OFFSET);
+    priv->ie = (cr1 & (USART_CR1_USED_INTS)) |
+      (cr3 & USART_CR3_EIE);
+  }
+ 
   /* Loop until there are no characters to be transferred or,
    * until we have been looping for a long time.
    */

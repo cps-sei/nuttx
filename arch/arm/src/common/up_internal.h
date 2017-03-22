@@ -284,6 +284,12 @@ EXTERN uint32_t _edata;           /* End+1 of .data */
 EXTERN uint32_t _sbss;            /* Start of .bss */
 EXTERN uint32_t _ebss;            /* End+1 of .bss */
 
+EXTERN const uint32_t _eronly_once;
+EXTERN uint32_t _sdata_once;
+EXTERN uint32_t _edata_once;
+EXTERN uint32_t _sbss_once;
+EXTERN uint32_t _ebss_once;
+  
 #ifdef CONFIG_SMP
 EXTERN uint32_t _snocache;        /* Start of .nocache */
 EXTERN uint32_t _enocache;        /* End+1 of .nocache */

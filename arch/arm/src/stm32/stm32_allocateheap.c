@@ -306,7 +306,8 @@
    /* Set the range of CCM SRAM as well (although we may not use it) */
 
 #  define SRAM2_START 0x10000000
-#  define SRAM2_END   0x10010000
+//#  define SRAM2_END   0x10010000
+#  define SRAM2_END   0x10008000
 
    /* There are 4 possible SRAM configurations:
     *

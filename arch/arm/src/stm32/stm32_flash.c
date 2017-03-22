@@ -340,7 +340,7 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
       putreg16(*hword, addr);
 
-      while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY) up_waste();
+      while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY) asm volatile("nop"); //up_waste();
 
       /* Verify */
 
