@@ -352,7 +352,15 @@ static void _up_assert(int errorcode) noreturn_function;
 static void _up_assert(int errorcode)
 {
   /* Are we in an interrupt handler or the idle task? */
-
+#ifndef CONFIG_ARCH_BOARD_PX4IO_V2
+  syslog(LOG_ERR, "_up_assert: %d\n", errorcode);
+  stm32_pwr_enablebkp(true);
+  *(volatile uint32_t *)0x40002854 = 0x11111111;
+  asm volatile("dsb");
+  
+  up_systemreset();
+#endif
+  
   if (CURRENT_REGS || (this_task())->pid == 0)
     {
       (void)up_irq_save();

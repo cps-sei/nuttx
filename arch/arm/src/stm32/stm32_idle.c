@@ -164,9 +164,110 @@ static void up_idlepm(void)
  *   power management operations might be performed.
  *
  ****************************************************************************/
+#include <sched.h>
+#include <nuttx/irq.h>
+
+extern volatile bool snp_do_save;
+extern volatile bool snp_do_restore;
+
+uint32_t altstack[1024] __attribute__((section(".bss.across_reboot")));
+uint32_t jmpbuf[2] __attribute__((section(".bss.across_reboot")));
+irqstate_t flags __attribute__((section(".bss.across_reboot")));
+
+
+int __attribute__((naked)) snp_setjmp(void)
+{
+	asm volatile("str sp, [%0]\n"
+		     "str lr, [%0, #4]\n"
+		     "mov r0, #0\n"
+		     "bx lr\n"
+		     :: "r"(jmpbuf) : "memory");
+}
+
+void __attribute__((naked)) snp_longjmp(int ret)
+{
+	asm volatile("ldr sp, [%1]\n"
+		     "ldr lr, [%1, #4]\n"
+		     "bx lr\n"
+		     :: "r"(ret), "r"(jmpbuf) : "memory");
+}
+
+extern void stm32_do_save(void);
+extern void stm32_do_restore(void);
+
+extern void prepare_for_reboot(void);
+extern void resync_with_px4io(void);
+
+void do_save(void)
+{
+	snp_do_save = FALSE;
+	syslog(LOG_INFO, "do save\n");
+	stm32_do_save();
+}
+
+void do_restore(void)
+{
+	syslog(LOG_INFO, "do restore\n");
+	snp_do_restore = false; //not really necessary
+	stm32_do_restore();
+	snp_longjmp(1);
+	//shouldn't reach here
+}
+
+extern bool snapshot_safe(void);
+extern void poll_snapshot(void);
+extern void poll_reboot(void);
+
+void snapshot_main(void)
+{
+	int s;
+
+	while (!mavlink_boot_complete());
+	prepare_for_reboot();
+
+	s = snp_setjmp();
+
+	if (s == 1) {
+		syslog(LOG_INFO, "restored ");
+		s = 0;
+		syslog(LOG_INFO, "fully\n");
+		resync_with_px4io();
+		leave_critical_section(flags);
+	}
+
+	for (;;) {
+		poll_reboot();
+		if (snp_do_save) {
+			flags = enter_critical_section();
+
+			if (snapshot_safe()) {
+				do_save();
+			}
+
+			leave_critical_section(flags);
+		}
+
+		if (snp_do_restore) {
+			flags = enter_critical_section();
+
+			if (snapshot_safe()) {
+				do_restore();
+				//shouldn't reach here
+
+			} else {
+				leave_critical_section(flags);
+			}
+		}
+	}
+}
 
 void up_idle(void)
 {
+#ifndef CONFIG_ARCH_BOARD_PX4IO_V2
+  asm volatile("mov.w sp, %0":: "r"(&altstack[1023]) : "memory");
+  snapshot_main();
+#endif
+  
 #if defined(CONFIG_SUPPRESS_INTERRUPTS) || defined(CONFIG_SUPPRESS_TIMER_INTS)
   /* If the system is idle and there are no timer interrupts, then process
    * "fake" timer interrupts. Hopefully, something will wake up.

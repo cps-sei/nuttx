@@ -67,6 +67,8 @@ void up_systemreset(void)
    * the AIRCR register.
    */
 
+  syslog("Reseting\n");
+  
   regval  = getreg32(NVIC_AIRCR) & NVIC_AIRCR_PRIGROUP_MASK;
   regval |= ((0x5fa << NVIC_AIRCR_VECTKEY_SHIFT) | NVIC_AIRCR_SYSRESETREQ);
   putreg32(regval, NVIC_AIRCR);

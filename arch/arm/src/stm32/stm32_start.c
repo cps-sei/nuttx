@@ -238,17 +238,81 @@ static void go_os_start(void *pv, unsigned int nbytes)
  *   This is the reset entry point.
  *
  ****************************************************************************/
+uint32_t __attribute__((section(".bss.across_reboot"))) dwt_log[16];
+int __attribute__((section(".bss.across_reboot"))) dwt_i;
+
+int warm_reboot;
+
+#include <nuttx/syslog/ramlog.h>
+#include <string.h>
+struct ramlog_dev_s	//copy
+{
+#ifndef CONFIG_RAMLOG_NONBLOCKING
+  volatile uint8_t  rl_nwaiters;     /* Number of threads waiting for data */
+#endif
+  volatile uint16_t rl_head;         /* The head index (where data is added) */
+  volatile uint16_t rl_tail;         /* The tail index (where data is removed) */
+  sem_t             rl_exclsem;      /* Enforces mutually exclusive access */
+#ifndef CONFIG_RAMLOG_NONBLOCKING
+  sem_t             rl_waitsem;      /* Used to wait for data */
+#endif
+  size_t            rl_bufsize;      /* Size of the RAM buffer */
+  FAR char         *rl_buffer;       /* Circular RAM buffer */
+
+  /* The following is a list if poll structures of threads waiting for
+   * driver events. The 'struct pollfd' reference for each open is also
+   * retained in the f_priv field of the 'struct file'.
+   */
+
+#ifndef CONFIG_DISABLE_POLL
+  struct pollfd *rl_fds[CONFIG_RAMLOG_NPOLLWAITERS];
+#endif
+};
+extern struct ramlog_dev_s g_sysdev;
+uint16_t rl_head, rl_tail;
+
+static void enable_dwt(void)
+{
+	volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
+	volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
+	volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
+
+	// enable the use DWT
+	*DEMCR = *DEMCR | 0x01000000;
+
+	// Reset cycle counter
+	*DWT_CYCCNT = 0;
+
+	// enable cycle counter
+	*DWT_CONTROL = *DWT_CONTROL | 1 ;
+}
+
+void record_dwt(void)
+{
+	volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
+	dwt_log[dwt_i++] = *DWT_CYCCNT;
+	if (dwt_i == 16) {
+		dwt_i = 0;
+	}
+}
 
 void __start(void)
 {
   const uint32_t *src;
   uint32_t *dest;
 
+  uint32_t primask, faultmask, basepri;
+  asm volatile("mrs %0, PRIMASK" : "=r"(primask));
+  asm volatile("mrs %0, FAULTMASK" : "=r"(faultmask));
+  asm volatile("mrs %0, BASEPRI" : "=r"(basepri));
+  
 #ifdef CONFIG_ARMV7M_STACKCHECK
   /* Set the stack limit before we attempt to call any functions */
 
   __asm__ volatile ("sub r10, sp, %0" : : "r" (CONFIG_IDLETHREAD_STACKSIZE - 64) : );
 #endif
+
+  enable_dwt();  
 
   /* Configure the UART so that we can get debug output as soon as possible */
 
@@ -288,6 +352,35 @@ void __start(void)
   itm_syslog_initialize();
 #endif
 
+#ifndef CONFIG_ARCH_BOARD_PX4IO_V2
+  stm32_pwr_enablebkp(true);
+  if (*(volatile uint32_t *)0x40002854 == 0x11111111) {
+	  warm_reboot = 1;
+  } else if (*(volatile uint32_t *)0x40002854 == 0x22222222) {
+	  warm_reboot = 2;
+  }
+
+  *(volatile uint32_t *)0x40002854 = 0;
+  rl_head = g_sysdev.rl_head;
+  rl_tail = g_sysdev.rl_tail;
+
+  for (src = &_eronly_once, dest = &_sdata_once; dest < &_edata_once; ) {
+	  *dest++ = *src++;
+  }
+
+  if (warm_reboot == 0) {
+	  for (dest = &_sbss_once;
+	       dest < &_ebss_once;
+	       ) {
+	      *dest++ = 0;
+	  }
+  } else {
+	  g_sysdev.rl_head = rl_head;
+	  g_sysdev.rl_tail = rl_tail;
+  }
+#endif
+
+  
   /* Perform early serial initialization */
 
 #ifdef USE_EARLYSERIALINIT
