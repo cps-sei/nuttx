@@ -265,7 +265,7 @@ struct ramlog_dev_s	//copy
    */
 
 #ifndef CONFIG_DISABLE_POLL
-  struct pollfd *rl_fds[CONFIG_RAMLOG_NPOLLWAITERS];
+  FAR struct pollfd *rl_fds[CONFIG_RAMLOG_NPOLLWAITERS];
 #endif
 };
 extern struct ramlog_dev_s g_sysdev;
